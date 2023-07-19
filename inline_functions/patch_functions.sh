@@ -469,3 +469,57 @@ function patch_command_line {
         exit 1
     fi
 }
+
+function validate_github_yaml {
+    file=".github/workflows/build_loop.yml"
+
+    if [ ! -f "$file" ]; then
+        echo "Error: Validating '$file' failed, file not found."
+        exit 1
+    fi
+
+    start_line=$(grep -n 'CustomizationSelect.sh' $file | head -n 1 | awk -F : '{print $1}')
+
+    count=0
+    parameters_started=false
+    expecting_continuation=false
+    last_valid_folder=""
+    next_line=""
+    while IFS= read -r line
+    do
+    original_line=$line
+    line=$(echo "$line" | sed 's/ \\$//' | xargs) # remove trailing backslash-space first, then trim leading/trailing white spaces
+
+    # Check if it's an empty line or a line containing only whitespace characters
+    if [[ -z "${line// /}" ]]; then
+        if [ "$expecting_continuation" = true ]; then
+        echo "Error after line $((count+1)): There is an empty line or a line with only whitespace after the customization '$last_valid_folder'. Please ensure that no lines are empty or contain only whitespace after a continuation character."
+        exit 1
+        fi
+    else
+        # If the line is a valid folder
+        if [[ " ${folders[@]} " =~ " ${line} " ]]; then
+        parameters_started=true
+        last_valid_folder=$line
+        if [[ "$original_line" == *"\\"* ]]; then
+            expecting_continuation=true
+        elif [[ " ${folders[@]} " =~ " ${next_line} " ]]; then
+            echo "Error at line $((count+1)): Parameter line for customization '$line' does not end with a continuation character but is expected to. Please ensure that parameter lines that are not the last have a continuation character."
+            exit 1
+        else
+            expecting_continuation=false
+        fi
+        else
+        if [ "$parameters_started" = true ]; then
+            expecting_continuation=false
+        fi
+        fi
+    fi
+
+    next_line=$(sed -n "$((count+start_line+3))p" $file | sed 's/ \\$//' | xargs)
+
+    ((count++))
+    done < <(awk -v s=$start_line 'NR>s' $file)
+
+    echo "Customization script has validated $file to be correctly formatted."
+}

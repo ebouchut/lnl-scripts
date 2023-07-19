@@ -78,6 +78,10 @@ add_customization "Algorithm Experiments (main only)" "algorithm_experiments" "m
 param_zero_is_customization
 param_zero_result=$?
 
+if [ "$GITHUB_ACTIONS" == "true" ]; then
+    validate_github_yaml
+fi
+
 if [ $param_zero_result -eq 0 ]; then
     patch_command_line $0 "$@"
 elif [ $# -gt 0 ] && [ -n "$1" ]; then
